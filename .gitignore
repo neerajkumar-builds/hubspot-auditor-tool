@@ -1,0 +1,19 @@
+# Build output
+dist/
+*.zip
+
+# Real lead-capture config (secrets) — use config-external.example.js as the template
+src/external/config-external.js
+
+# Private reference material (oracle data, internal strategy, brand assets) — never commit
+reference/
+
+# Standalone portfolio page — kept out of the repo; used separately
+showcase/
+
+# OS / editor
+.DS_Store
+*.log
+node_modules/
+.vscode/
+.idea/

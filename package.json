@@ -1,0 +1,16 @@
+{
+  "name": "hubspot-workflow-auditor",
+  "version": "1.2.0",
+  "private": true,
+  "description": "One-click HubSpot hygiene audit as a Manifest V3 Chrome extension — workflows, lists, properties, forms, flow step-maps, conflicts, and a remediation plan, exported to a branded Excel report. Reads the logged-in HubSpot session; zero runtime dependencies.",
+  "author": "Neeraj Kumar",
+  "type": "module",
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "package": "node tools/build.mjs && node tools/package.mjs",
+    "test": "node tools/build.mjs && node tests/audit.test.mjs"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {},
+  "devDependencies": {}
+}

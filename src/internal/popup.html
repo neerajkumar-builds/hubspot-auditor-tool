@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <style>
+    :root{
+      --accent:#146DFA; --dark:#0A0A0A; --light:#F9F9F9; --line:#ECECEC;
+      --ink:#0A0A0A; --muted:#8A8A8A; --ok:#0E9F6E; --warn:#B5500F;
+      --font:'Montserrat', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    }
+    *{box-sizing:border-box}
+    body{font-family:var(--font); width:360px; margin:0; color:var(--ink); background:#fff; font-size:13px; line-height:1.45;}
+    /* header */
+    .hdr{background:var(--dark); color:#fff; padding:14px 16px; display:flex; align-items:center; gap:10px;}
+    .hdr .mark{flex:0 0 auto}
+    .hdr .title{font-weight:700; font-size:14px; letter-spacing:.2px}
+    .hdr .title .thin{font-weight:400; color:#cfd8e6}
+    .hdr .sub{font-size:10px; color:#9aa6b6; margin-top:1px; letter-spacing:.3px; text-transform:uppercase}
+    .hdr .spacer{flex:1}
+    .pill{display:inline-block; background:rgba(20,109,250,.18); color:#7fb0ff; border:1px solid rgba(20,109,250,.5);
+      border-radius:999px; padding:2px 10px; font-size:11px; font-weight:600;}
+    .pill.live{background:var(--accent); color:#fff; border-color:var(--accent)}
+    /* body */
+    .body{padding:16px}
+    .hint{color:var(--muted); font-size:11px; margin:0 0 10px}
+    .modules{display:flex; flex-wrap:wrap; gap:5px 14px; margin:0 0 12px}
+    .modules .mlabel{width:100%; color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.4px; margin-bottom:2px}
+    .modules label{display:inline-flex; align-items:center; gap:6px; font-size:12px; color:#333; cursor:pointer}
+    .modules input{width:auto; margin:0; padding:0; border:0; accent-color:var(--accent)}
+    .modules .muted{color:var(--muted); font-size:10px}
+    button{width:100%; padding:11px; border:0; border-radius:999px; background:var(--accent); color:#fff;
+      font-family:var(--font); font-weight:700; font-size:13px; cursor:pointer; transition:filter .15s;}
+    button:hover{filter:brightness(1.07)} button:disabled{background:#9bbcf5; cursor:default; filter:none}
+    button.ghost{background:#fff; color:var(--accent); border:1.5px solid var(--accent)}
+    #bar{height:6px; background:var(--line); border-radius:999px; overflow:hidden; margin:14px 0 6px; display:none}
+    #bar>div{height:100%; width:0; background:var(--accent); transition:width .25s}
+    #status{color:var(--muted); font-size:11px; min-height:14px}
+    /* results */
+    .card{background:var(--light); border:1px solid var(--line); border-radius:12px; padding:6px 14px; margin-top:12px; display:none}
+    .row{display:flex; justify-content:space-between; align-items:center; padding:7px 0; border-bottom:1px solid var(--line)}
+    .row:last-child{border-bottom:0}
+    .row .k{color:#444} .row .k small{color:var(--muted); font-weight:400}
+    .row .v{font-weight:700; font-variant-numeric:tabular-nums; font-size:14px}
+    .row .v.bad{color:var(--warn)} .row .v.accent{color:var(--accent)}
+    #accept{font-size:11px; font-weight:600; margin-top:10px; padding:8px 10px; border-radius:8px; display:none}
+    #accept.ok{background:rgba(14,159,110,.1); color:var(--ok)} #accept.bad{background:rgba(181,80,15,.1); color:var(--warn)}
+    .foot{margin-top:12px; color:var(--muted); font-size:10px; text-align:center; line-height:1.5}
+    details{margin-top:12px; border-top:1px solid var(--line); padding-top:10px}
+    summary{cursor:pointer; color:var(--accent); font-size:11px; font-weight:600; list-style:none}
+    summary::-webkit-details-marker{display:none}
+    input{width:100%; box-sizing:border-box; padding:9px 11px; border:1px solid #ccc; border-radius:8px; margin:8px 0; font-family:var(--font); font-size:12px}
+  </style>
+</head>
+<body>
+  <div class="hdr">
+    <img class="mark" src="icons/mark-white.png" width="26" height="26" alt="FullFunnel" />
+    <div>
+      <div class="title">Full<span class="thin">Funnel</span></div>
+      <div class="sub">Workflow Auditor</div>
+    </div>
+    <div class="spacer"></div>
+    <span id="portal" class="pill">detecting…</span>
+  </div>
+
+  <div class="body">
+    <p class="hint" id="hint">Reads your logged-in HubSpot session — no token, nothing leaves your browser.</p>
+    <div class="modules">
+      <span class="mlabel">Include in audit (workflows always on)</span>
+      <label><input type="checkbox" id="m-lists" /> Lists</label>
+      <label><input type="checkbox" id="m-props" /> Properties</label>
+      <label><input type="checkbox" id="m-propfill" /> + fill-rate <span class="muted">(slow)</span></label>
+      <label><input type="checkbox" id="m-forms" /> Forms</label>
+      <label><input type="checkbox" id="m-flows" /> Flow maps <span class="muted">(slower)</span></label>
+    </div>
+    <button id="run">Run audit</button>
+
+    <div id="bar"><div></div></div>
+    <div id="status"></div>
+
+    <div class="card" id="summary">
+      <div class="row"><span class="k">Total workflows</span><span class="v" id="t-total">–</span></div>
+      <div class="row"><span class="k">Active / Inactive</span><span class="v"><span id="t-on">–</span> / <span id="t-off">–</span></span></div>
+      <div class="row"><span class="k">Flagged errors</span><span class="v bad" id="t-err">–</span></div>
+      <div class="row"><span class="k">Dormant <small>(on, idle)</small></span><span class="v" id="t-dorm">–</span></div>
+      <div class="row"><span class="k">Never enrolled</span><span class="v" id="t-never">–</span></div>
+      <div class="row"><span class="k">Duplicate clusters <small>(preview)</small></span><span class="v accent" id="t-dup">–</span></div>
+    </div>
+    <div id="accept"></div>
+
+    <div class="foot">Excel + CSV download automatically · Duplicate-cluster count is a preview</div>
+  </div>
+
+  <script src="src/config.js"></script>
+  <script src="src/diagnostics.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>
