@@ -88,6 +88,7 @@
     rows.push([]);
     rows.push(["", S("Property Audit — FullFunnel", xl.TITLE)]);
     rows.push(["", S(`Portal ${portalId} · custom-field hygiene across core objects`, xl.GREY)]);
+    rows.push(["", S("Recommendation legend — KEEP / REMOVE / UPDATE (if UPDATE: consolidate with another property, or change type)", xl.GREY)]);
     rows.push([]);
     rows.push(["", S("Summary by object", xl.BOLD)]);
     const sumHead = ["", S("Object", 1), S("Total props", 1), S("Custom", 1), S("No description", 1), S("Dup-label groups", 1)];

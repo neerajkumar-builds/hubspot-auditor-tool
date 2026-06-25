@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FullFunnel HubSpot Audit (Free)",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "description": "Free one-click HubSpot hygiene audit by FullFunnel — workflows, lists, properties, forms, flow maps + a cleanup plan, exported to Excel. Runs on your logged-in session.",
   "action": {
     "default_popup": "popup.html",

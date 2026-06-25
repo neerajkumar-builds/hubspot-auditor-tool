@@ -56,11 +56,13 @@ FFA.TRIGGER_LABEL = {
 FFA.RATE_SLEEP_MS = 250;        // between paged requests
 FFA.DUP_SIMILARITY = 0.6;       // Jaccard threshold for the popup's dup-cluster preview
 
-// Acceptance oracle (validated HubSpot_Workflow_Audit.xlsx, portal 545075).
+// Acceptance baseline (portal 545075), re-based v1.1 to the HubSpot Workflows-list definition:
+// excludes external (integration-managed) + deleted flows, matching what users see in the UI.
+// Structural total/on/off are validated exact; derived figures are point-in-time (see note).
 FFA.ACCEPTANCE = {
   portal: "545075",
-  total: 229, on: 134, off: 95,
-  errored: 14, dormant: 111, neverEnrolled: 10, dupClusters: 33
+  total: 214, on: 127, off: 87,
+  errored: 14, neverEnrolled: 8
 };
 
 // Adapter B (session) request spec — internal crm-search over CRM object 0-44.
@@ -80,9 +82,17 @@ FFA.SESSION = {
     "hs_total_enrolled", "hs_7_day_enrollment", "hs_total_unique_contacts_enrolled",
     "hs_currently_enrolled", "hs_current_active_issue_count", "hs_source_app",
     "hs_flow_created_at", "hs_flow_created_by_user_id",
-    "hs_flow_updated_at", "hs_flow_updated_by_user_id", "hs_flow_id"
+    "hs_flow_updated_at", "hs_flow_updated_by_user_id", "hs_flow_id",
+    // v1.1: distinguish what the HubSpot Workflows list shows (excludes external + deleted),
+    // and support a stable "stale" signal (last action run date).
+    "hs_is_external", "hs_is_deleted", "hs_last_action_execution_date"
   ]
 };
+
+// "Stale" threshold (days) for the durable dead-workflow signal — far less volatile than the
+// rolling 7-day enrollment count. A flow ON with no action executed in this long is a real
+// delete candidate regardless of which day the audit runs.
+FFA.STALE_DAYS = 90;
 
 FFA.buildUrl = (portal, id) =>
   `https://app.hubspot.com/workflows/${portal}/platform/flow/${id}/edit`;
@@ -115,6 +125,13 @@ FFA.mapSessionRow = function (r, portalId, ownerMap) {
     updated_on: day(r.hs_flow_updated_at),
     updated_by: owner(r.hs_flow_updated_by_user_id),
     id: r.objectId,
-    url: FFA.buildUrl(portalId, r.hs_flow_id || r.objectId)
+    url: FFA.buildUrl(portalId, r.hs_flow_id || r.objectId),
+    // Internal flags (NOT part of FFA.COLUMNS / the CSV) — used to match the HubSpot
+    // Workflows list and to compute the stale signal. toCSV only emits COLUMNS, so these
+    // never reach the CSV.
+    _external: String(r.hs_is_external) === "true",
+    _deleted: String(r.hs_is_deleted) === "true",
+    _inWorkflowsUI: String(r.hs_is_external) !== "true" && String(r.hs_is_deleted) !== "true",
+    _lastActionMs: Number(r.hs_last_action_execution_date) || 0
   };
 };

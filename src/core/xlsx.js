@@ -165,16 +165,21 @@
     return out;
   }
 
-  FFA.buildAuditModel = function (rows) {
+  FFA.buildAuditModel = function (rows, opts) {
+    opts = opts || {};
+    const now = opts.now || Date.now();
+    const staleMs = (FFA.STALE_DAYS || 90) * 86400000;
     rows.forEach((r) => { r._fn = classify(r); });
     const on = rows.filter(isOn), off = rows.filter((r) => !isOn(r));
     const errored = rows.filter((r) => num(r.active_issues) > 0);
     const dormant = on.filter((r) => num(r.enrolled_7d) === 0 && num(r.currently_enrolled) === 0);
     const never = on.filter((r) => num(r.total_enrolled) === 0);
     const dormantOnly = dormant.filter((r) => num(r.total_enrolled) > 0);
+    // stable "dead" signal: ON, ran before, but no action executed in STALE_DAYS.
+    const stale = on.filter((r) => Number(r._lastActionMs) > 0 && (now - Number(r._lastActionMs)) > staleMs);
     const clusters = cluster(rows).sort((a, b) => b.group.length - a.group.length);
     const inClusters = clusters.reduce((s, c) => s + c.group.length, 0);
-    return { on, off, errored, dormant, never, dormantOnly, clusters, inClusters,
+    return { on, off, errored, dormant, never, dormantOnly, stale, clusters, inClusters,
       pct: rows.length ? Math.round(100 * inClusters / rows.length) : 0 };
   };
 
@@ -194,25 +199,30 @@
     diag.push(["", S(`Portal ${meta.portal || "?"} · ${rows.length} automation flows indexed · ${meta.date || ""}`, 4)]);
     diag.push([]);
     diag.push(["", S("Headline findings", 2)]);
+    const ex = meta.extras || { total: 0, external: 0, deleted: 0 };
     const findings = [
-      ["Total automation flows", rows.length, "Indexed via internal CRM object 0-44"],
+      ["Workflows (as shown in HubSpot)", rows.length, "Matches the HubSpot Workflows list"],
       ["Active (ON)", m.on.length, "Currently enabled"],
       ["Inactive (OFF)", m.off.length, "Archive / delete review"],
       ["Flows with HubSpot-flagged errors", m.errored.length, "Fix or retire — see Cleanup Queue"],
-      ["Active but DORMANT", m.dormant.length, "On, but 0 enrolled in 7d and 0 currently"],
-      ["  …of those, NEVER enrolled anyone", m.never.length, "Strong delete candidates"],
+      ["Never enrolled anyone", m.never.length, "On but never used — strong delete candidates"],
+      ["Stale — no action in " + (FFA.STALE_DAYS || 90) + "+ days", m.stale.length, "Ran before, now idle — likely dead (stable signal)"],
+      ["Active but idle (point-in-time)", m.dormant.length, "ON, 0 enrolled in the 7 days before this run + 0 currently — a rolling metric, expect day-to-day drift"],
       ["Near-duplicate clusters", m.clusters.length, "Consolidation opportunities — see Consolidation Map"],
-      ["Workflows inside those clusters", m.inClusters, `${m.pct}% of all flows look like duplicates`]
+      ["Workflows inside those clusters", m.inClusters, `${m.pct}% of flows look like duplicates`]
     ];
     findings.forEach(([l, v, note]) => diag.push(["", l, N(v, 2), S(note, 4)]));
+    if (ex.total) diag.push(["", S("+ Other automations not in the Workflows list", 4),
+      N(ex.total, 4), S(`Excluded from the audit: ${ex.external} external/integration-managed, ${ex.deleted} deleted`, 4)]);
     diag.push([]);
     diag.push(["", S("Recommended actions (priority order)", 2)]);
     diag.push(["", S("Action", 2), S("Priority", 2), S("Why", 2)]);
-    [["Fix or kill the flagged-error flows", "High", "They may be failing silently. Triage in Cleanup Queue."],
-     ["Retire never-enrolled active flows + review other dormant", "Medium", "On but idle = risk + clutter. Confirm not seasonal."],
-     ["Consolidate the largest near-duplicate clusters", "High", "Highest-leverage dedup — see Consolidation Map."],
-     ["Archive the OFF flows that are truly retired", "Low", "Reduces the in-app surface and audit noise."],
-     ["Establish naming + ownership governance", "Med", "Most clusters trace to one-off builds."]
+    [["REMOVE — fix or kill the flagged-error flows", "High", "They may be failing silently. Triage in Cleanup Queue."],
+     ["REMOVE — never-enrolled + stale active flows", "High", "On but doing nothing = risk + clutter. Confirm not seasonal."],
+     ["MERGE — consolidate the largest near-duplicate clusters", "High", "Highest-leverage dedup — see Consolidation Map."],
+     ["ADJUST — review point-in-time idle flows", "Medium", "Confirm against a longer window before disabling."],
+     ["REMOVE — archive the OFF flows that are truly retired", "Low", "Reduces the in-app surface and audit noise."],
+     ["KEEP + govern — naming + ownership going forward", "Med", "Most clusters trace to one-off builds."]
     ].forEach((a) => diag.push(["", a[0], a[1], S(a[2], 4)]));
 
     // --- Remediation Plan (services-ready proposal) ---
@@ -222,12 +232,13 @@
     rem.push(["", S(`Portal ${meta.portal || "?"} · scoped cleanup from ${rows.length} workflows · ${meta.date || ""}`, 4)]);
     rem.push([]);
     rem.push(["", S("The opportunity", 2)]);
-    rem.push(["", S("Action area", 1), S("Count", 1), S("Why", 1)]);
-    [["Fix — silently erroring", m.errored.length, "May be failing with no one watching"],
-     ["Delete — on but never enrolled anyone", m.never.length, "Safe to remove"],
-     ["Review — on but dormant", m.dormantOnly.length, "Confirm not seasonal, then disable/delete"],
-     ["Archive — switched off", m.off.length, "Reduce clutter + audit surface"],
-     ["Consolidate — near-duplicate clusters", m.clusters.length, `${m.inClusters} flows could collapse toward ~${m.clusters.length}`]
+    rem.push(["", S("Recommendation", 1), S("Count", 1), S("Why", 1)]);
+    [["REMOVE — silently erroring", m.errored.length, "May be failing with no one watching"],
+     ["REMOVE — never enrolled anyone", m.never.length, "On but never used — safe to remove"],
+     ["REMOVE — stale (no action in " + (FFA.STALE_DAYS || 90) + "+ days)", m.stale.length, "Ran before, now idle — likely dead (stable signal)"],
+     ["ADJUST — point-in-time idle", m.dormantOnly.length, "0 enrolled in the prior 7 days; confirm vs a longer window before disabling"],
+     ["REMOVE — switched off / retired", m.off.length, "Archive to reduce clutter + audit surface"],
+     ["MERGE — near-duplicate clusters", m.clusters.length, `${m.inClusters} flows could collapse toward ~${m.clusters.length}`]
     ].forEach((r) => rem.push(["", r[0], N(r[1], 2), S(r[2], 4)]));
     rem.push([]);
     rem.push(["", S("Recommended sequence", 2)]);

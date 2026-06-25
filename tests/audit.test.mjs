@@ -48,8 +48,38 @@ section("diagnostics");
   ok("dormant = 2 (B + C: on, 7d=0, curr=0)", t.dormant === 2);
   ok("neverEnrolled = 1 (C)", t.neverEnrolled === 1);
   ok("dupClusters >= 1 (A ~ duplicate desc)", t.dupClusters >= 1);
-  const a = s.FFA.checkAcceptance({ total: 229, on: 134, off: 95, errored: 14, dormant: 111, neverEnrolled: 10, dupClusters: 33 });
-  ok("acceptance structural all-ok on oracle numbers", a.structural.every((x) => x.ok));
+  const a = s.FFA.checkAcceptance({ total: 214, on: 127, off: 87, errored: 14, neverEnrolled: 8 });
+  ok("acceptance structural all-ok on re-based numbers (214/127/87)", a.structural.every((x) => x.ok));
+  const bad = s.FFA.checkAcceptance({ total: 229, on: 134, off: 95 });
+  ok("acceptance flags the old 229 count as a mismatch", !bad.structural.every((x) => x.ok));
+
+  // stale signal: ON, ran before, no action in STALE_DAYS
+  const NOW = Date.parse("2026-06-25T00:00:00Z"), D = 86400000;
+  const staleRows = [
+    { status: "ON", object_type: "Contact", enrolled_7d: 0, currently_enrolled: 0, total_enrolled: 5, active_issues: 0, _lastActionMs: NOW - 200 * D },
+    { status: "ON", object_type: "Contact", enrolled_7d: 0, currently_enrolled: 0, total_enrolled: 5, active_issues: 0, _lastActionMs: NOW - 10 * D },
+    { status: "OFF", object_type: "Contact", _lastActionMs: NOW - 300 * D }
+  ];
+  ok("stale = 1 (ON + ran 200d ago; the 10d one and the OFF one don't count)",
+     s.FFA.computeDiagnostics(staleRows, { now: NOW }).totals.stale === 1);
+}
+
+// ---- 1b. partitionActionable (match HubSpot UI: exclude external + deleted) ----
+section("partitionActionable");
+{
+  const s = freshFFA();
+  const rows = [
+    { name: "ui1", _inWorkflowsUI: true, _external: false, _deleted: false },
+    { name: "ui2", _inWorkflowsUI: true, _external: false, _deleted: false },
+    { name: "ext", _inWorkflowsUI: false, _external: true, _deleted: false },
+    { name: "del", _inWorkflowsUI: false, _external: false, _deleted: true },
+    { name: "legacy-no-flag" }  // treated as actionable
+  ];
+  const p = s.FFA.partitionActionable(rows);
+  ok("actionable = 3 (2 ui + 1 legacy)", p.actionable.length === 3);
+  ok("extras.total = 2", p.extras.total === 2);
+  ok("extras.external = 1", p.extras.external === 1);
+  ok("extras.deleted = 1", p.extras.deleted === 1);
 }
 
 // ---- 2. session row mapping ----
@@ -73,6 +103,13 @@ section("mapSessionRow");
   const u = s.FFA.mapSessionRow({ objectId: "1", hs_object_type_id: "0-999", hs_enabled: "false" }, "p", {});
   ok("unmapped objectType passes through", u.object_type === "0-999");
   ok("unresolved owner -> blank", u.created_by === "");
+  // v1.1 flags: external / deleted exclusion + inWorkflowsUI
+  const ext = s.FFA.mapSessionRow({ objectId: "2", hs_enabled: "true", hs_is_external: "true" }, "p", {});
+  ok("external flow flagged + excluded from UI set", ext._external === true && ext._inWorkflowsUI === false);
+  const del = s.FFA.mapSessionRow({ objectId: "3", hs_enabled: "true", hs_is_deleted: "true" }, "p", {});
+  ok("deleted flow flagged + excluded from UI set", del._deleted === true && del._inWorkflowsUI === false);
+  ok("normal flow stays in UI set", r._inWorkflowsUI === true);
+  ok("internal flags NOT in CSV columns", s.FFA.COLUMNS.indexOf("_external") === -1 && s.FFA.COLUMNS.indexOf("_inWorkflowsUI") === -1);
 }
 
 // ---- 3. xlsx writer emits a valid workbook ----

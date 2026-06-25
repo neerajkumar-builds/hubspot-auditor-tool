@@ -95,9 +95,13 @@
     const raw = await fetchFlows(spec, portalId, headers);
     progress("building", raw.length, raw.length);
 
-    const rows = raw.map((r) => FFA.mapSessionRow(r, portalId, ownerMap));
+    const allRows = raw.map((r) => FFA.mapSessionRow(r, portalId, ownerMap));
+    // Match the HubSpot Workflows list: audit the actionable set (excludes external +
+    // deleted flows the UI hides); report the extras only as a reconciliation count.
+    const part = FFA.partitionActionable(allRows);
+    const rows = part.actionable;
     const diag = FFA.computeDiagnostics(rows);
-    const meta = { portal: portalId, date: new Date().toISOString().slice(0, 10) };
+    const meta = { portal: portalId, date: new Date().toISOString().slice(0, 10), extras: part.extras };
 
     // Optional add-on modules. Each is isolated in try/catch — a failure (missing endpoint,
     // lower tier, API change) is skipped and NEVER aborts the workflow audit.
